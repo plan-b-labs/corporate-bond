@@ -36,7 +36,7 @@ contract CorporateBondRepayVaultTest is Test {
         tokenId = bond.safeMint(lender, "test-uri");
 
         // Deploy vault
-        vault = new CorporateBondRepayVault(token, borrower, bond, tokenId);
+        vault = new CorporateBondRepayVault(bond, tokenId, borrower, token);
     }
 
     function testBorrowerCanDeposit() public {
