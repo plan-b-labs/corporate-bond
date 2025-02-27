@@ -26,11 +26,11 @@ contract CorporateBondRepayVault is ERC4626 {
     uint256 public immutable bondNFTTokenId;
 
     constructor(
-        IERC20 asset,
-        address borrower_,
         IERC721 bondNFTContract_,
-        uint256 bondNFTTokenId_
-    ) ERC4626(asset) ERC20("CorporateBondRepayVault", "CBRV") {
+        uint256 bondNFTTokenId_,
+        address borrower_,
+        IERC20 repayAsset_
+    ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") {
         borrower = borrower_;
         bondNFTContract = bondNFTContract_;
         bondNFTTokenId = bondNFTTokenId_;
