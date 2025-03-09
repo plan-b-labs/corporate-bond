@@ -20,126 +20,130 @@ contract CorporateBondRepayVaultTest is Test {
     CorporateBondRepayVault public vault;
     MockERC20 public token;
 
-    address public borrower;
-    address public lender;
+    address public debtor;
+    address public creditor;
     uint256 public tokenId;
 
     function setUp() public {
-        borrower = makeAddr("borrower");
-        lender = makeAddr("lender");
+        debtor = makeAddr("debtor");
+        creditor = makeAddr("creditor");
 
         // Deploy mock ERC20 token
         token = new MockERC20();
 
         // Deploy CorporateBond NFT
         bond = new CorporateBond(address(this));
-        tokenId = bond.safeMint(lender, "test-uri");
+        tokenId = bond.safeMint(creditor, "test-uri");
 
         // Deploy vault
-        vault = new CorporateBondRepayVault(bond, tokenId, borrower, token);
+        vault = new CorporateBondRepayVault(bond, tokenId, debtor, token);
     }
 
-    function testBorrowerCanDeposit() public {
+    function testDebtorCanDeposit() public {
         uint256 depositAmount = 1000e18;
-        token.mint(borrower, depositAmount);
+        token.mint(debtor, depositAmount);
 
-        vm.startPrank(borrower);
+        vm.startPrank(debtor);
         token.approve(address(vault), depositAmount);
-        vault.deposit(depositAmount, lender);
+        vault.deposit(depositAmount, creditor);
         vm.stopPrank();
 
-        assertEq(vault.balanceOf(lender), depositAmount);
+        assertEq(vault.balanceOf(creditor), depositAmount);
     }
 
-    function testNonBorrowerCannotDeposit() public {
+    function testNonDebtorCannotDeposit() public {
         uint256 depositAmount = 1000e18;
         token.mint(address(this), depositAmount);
 
         token.approve(address(vault), depositAmount);
         vm.expectRevert(
             abi.encodeWithSelector(
-                CorporateBondRepayVault.OnlyBorrower.selector, address(this), borrower
+                CorporateBondRepayVault.OnlyDebtor.selector, address(this), debtor
             )
         );
-        vault.deposit(depositAmount, lender);
+        vault.deposit(depositAmount, creditor);
     }
 
-    function testLenderCanWithdraw() public {
+    function testCreditorCanWithdraw() public {
         uint256 depositAmount = 1000e18;
-        token.mint(borrower, depositAmount);
+        token.mint(debtor, depositAmount);
 
-        // Borrower deposits
-        vm.startPrank(borrower);
+        // Debtor deposits
+        vm.startPrank(debtor);
         token.approve(address(vault), depositAmount);
-        vault.deposit(depositAmount, lender);
+        vault.deposit(depositAmount, creditor);
         vm.stopPrank();
 
-        // Lender withdraws
-        vm.startPrank(lender);
-        vault.withdraw(depositAmount, lender, lender);
+        // Creditor withdraws
+        vm.startPrank(creditor);
+        vault.withdraw(depositAmount, creditor, creditor);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(lender), depositAmount);
+        assertEq(token.balanceOf(creditor), depositAmount);
     }
 
-    function testNonLenderCannotWithdraw() public {
+    function testNonCreditorCannotWithdraw() public {
         uint256 depositAmount = 1000e18;
-        token.mint(borrower, depositAmount);
+        token.mint(debtor, depositAmount);
 
-        // Borrower deposits
-        vm.startPrank(borrower);
+        // Debtor deposits
+        vm.startPrank(debtor);
         token.approve(address(vault), depositAmount);
-        vault.deposit(depositAmount, lender);
+        vault.deposit(depositAmount, creditor);
         vm.stopPrank();
 
-        // Non-lender tries to withdraw
-        address nonLender = makeAddr("nonLender");
-        vm.startPrank(nonLender);
+        // Non-creditor tries to withdraw
+        address nonCreditor = makeAddr("nonCreditor");
+        vm.startPrank(nonCreditor);
         vm.expectRevert(
-            abi.encodeWithSelector(CorporateBondRepayVault.OnlyLender.selector, nonLender, lender)
+            abi.encodeWithSelector(
+                CorporateBondRepayVault.OnlyCreditor.selector, nonCreditor, creditor
+            )
         );
-        vault.withdraw(depositAmount, nonLender, lender);
+        vault.withdraw(depositAmount, nonCreditor, creditor);
         vm.stopPrank();
     }
 
-    function testDepositToNonLenderFails() public {
+    function testDepositToNonCreditorFails() public {
         uint256 depositAmount = 1000e18;
-        token.mint(borrower, depositAmount);
-        address nonLender = makeAddr("nonLender");
+        token.mint(debtor, depositAmount);
+        address nonCreditor = makeAddr("nonCreditor");
 
-        vm.startPrank(borrower);
+        vm.startPrank(debtor);
         token.approve(address(vault), depositAmount);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                CorporateBondRepayVault.OnlyLenderRecipient.selector, nonLender, lender
+                CorporateBondRepayVault.OnlyCreditorRecipient.selector, nonCreditor, creditor
             )
         );
-        vault.deposit(depositAmount, nonLender);
+        vault.deposit(depositAmount, nonCreditor);
         vm.stopPrank();
     }
 
-    function testLenderTransferUpdatesAccess() public {
+    function testCreditorTransferUpdatesAccess() public {
         uint256 depositAmount = 1000e18;
-        token.mint(borrower, depositAmount);
-        address newLender = makeAddr("newLender");
+        token.mint(debtor, depositAmount);
+        address newCreditor = makeAddr("newCreditor");
 
         // Initial deposit
-        vm.startPrank(borrower);
+        vm.startPrank(debtor);
         token.approve(address(vault), depositAmount);
-        vault.deposit(depositAmount, lender);
+        vault.deposit(depositAmount, creditor);
         vm.stopPrank();
 
-        // Transfer NFT to new lender
-        vm.prank(lender);
-        bond.transferFrom(lender, newLender, tokenId);
+        // Transfer NFT to new creditor
+        vm.prank(creditor);
+        bond.transferFrom(creditor, newCreditor, tokenId);
 
-        // Original lender should no longer be able to withdraw
-        vm.startPrank(lender);
+        // Original creditor should no longer be able to withdraw
+        vm.startPrank(creditor);
         vm.expectRevert(
-            abi.encodeWithSelector(CorporateBondRepayVault.OnlyLender.selector, lender, newLender)
+            abi.encodeWithSelector(
+                CorporateBondRepayVault.OnlyCreditor.selector, creditor, newCreditor
+            )
         );
-        vault.withdraw(depositAmount, lender, lender);
+        vault.withdraw(depositAmount, creditor, creditor);
         vm.stopPrank();
     }
 }
