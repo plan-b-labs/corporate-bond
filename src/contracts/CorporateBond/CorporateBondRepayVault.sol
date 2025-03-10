@@ -4,6 +4,7 @@
 pragma solidity 0.8.25;
 
 import {ICorporateBondRepayVault} from "../../interface/CorporateBond/ICorporateBondRepayVault.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -16,7 +17,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
  * @dev The creditor can deposit assets into the vault to provide the principal.
  * @dev The debtor can deposit assets into the vault to repay the principal or interest.
  */
-contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626 {
+contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     address public immutable debtor;
     IERC721 public immutable bondNFTContract;
     uint256 public immutable bondNFTTokenId;
@@ -26,22 +27,33 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626 {
     bool public principalPaid;
     // The amount of principal repaid to the creditor
     uint256 public principalRepaid;
+    // The amount of fees paid to the vault in bips
+    uint48 public vaultFeesBips;
 
     constructor(
+        address owner_,
         IERC721 bondNFTContract_,
         uint256 bondNFTTokenId_,
         address debtor_,
         IERC20 repayAsset_,
         uint256 debtAmount_,
         bool principalPaid_,
-        uint256 principalRepaid_
-    ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") {
+        uint256 principalRepaid_,
+        uint48 vaultFeesBips_
+    ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") Ownable(owner_) {
         debtor = debtor_;
         bondNFTContract = bondNFTContract_;
         bondNFTTokenId = bondNFTTokenId_;
         debtAmount = debtAmount_;
         principalPaid = principalPaid_;
         principalRepaid = principalRepaid_;
+        vaultFeesBips = vaultFeesBips_;
+    }
+
+    function setVaultFeesBips(
+        uint48 vaultFeesBips_
+    ) external onlyOwner {
+        vaultFeesBips = vaultFeesBips_;
     }
 
     /// @inheritdoc ICorporateBondRepayVault
@@ -92,10 +104,17 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626 {
                 revert OnlyDebtor(_msgSender(), debtor);
             }
 
+            // Calculate the amount of fees to pay to the vault
+            uint256 fees = (assets * vaultFeesBips) / 10_000;
+            // Subtract the fees from the amount of interest to pay
+            uint256 netAssets = assets - fees;
+
             emit InterestPaid(assets, debtor, _creditor);
 
+            // Deposit the fees to the vault owner
+            super.deposit(fees, owner());
             // Deposit to creditor
-            return super.deposit(assets, _creditor);
+            return super.deposit(netAssets, _creditor);
         }
     }
 
