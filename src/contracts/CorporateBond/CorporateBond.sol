@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
 
-pragma solidity 0.8.25;
+pragma solidity 0.8.28;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
@@ -17,8 +17,8 @@ contract CorporateBond is ERC721, ERC721URIStorage, Ownable {
 
     function safeMint(address to, string memory uri) public onlyOwner returns (uint256) {
         uint256 tokenId = _nextTokenId++;
-        _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
+        _safeMint(to, tokenId);
         return tokenId;
     }
 

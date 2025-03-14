@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
 
-pragma solidity 0.8.25;
+pragma solidity 0.8.28;
 
 import {ICorporateBondRepayVault} from "../../interface/CorporateBond/ICorporateBondRepayVault.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -41,6 +41,10 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         uint256 principalRepaid_,
         uint48 vaultFeesBips_
     ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") Ownable(owner_) {
+        if (debtor_ == address(0)) {
+            revert ZeroAddress();
+        }
+
         debtor = debtor_;
         bondNFTContract = bondNFTContract_;
         bondNFTTokenId = bondNFTTokenId_;
@@ -53,7 +57,9 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     function setVaultFeesBips(
         uint48 vaultFeesBips_
     ) external onlyOwner {
+        uint48 oldBips = vaultFeesBips;
         vaultFeesBips = vaultFeesBips_;
+        emit VaultFeesSet(oldBips, vaultFeesBips_);
     }
 
     /// @inheritdoc ICorporateBondRepayVault

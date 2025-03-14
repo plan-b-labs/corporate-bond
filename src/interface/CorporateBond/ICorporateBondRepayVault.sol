@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Compatible with OpenZeppelin Contracts ^5.0.0
 
-pragma solidity 0.8.25;
+pragma solidity 0.8.28;
 
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
@@ -9,7 +9,9 @@ interface ICorporateBondRepayVault is IERC4626 {
     event PrincipalPaid(uint256 amount, address creditor, address debtor);
     event PrincipalRepaid(uint256 amount, address debtor, address creditor);
     event InterestPaid(uint256 amount, address debtor, address creditor);
+    event VaultFeesSet(uint48 oldBips, uint48 newBips);
 
+    error ZeroAddress();
     error OnlyDebtor(address addr, address debtor);
     error OnlyDebtorOrCreditor(address addr, address debtor, address creditor);
     error InvalidPrincipalAmount(uint256 amount, uint256 debtAmount);

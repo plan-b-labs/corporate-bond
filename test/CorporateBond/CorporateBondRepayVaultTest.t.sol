@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.25;
+pragma solidity 0.8.28;
 
 import {CorporateBond} from "../../src/contracts/CorporateBond/CorporateBond.sol";
 import {
@@ -177,6 +177,16 @@ contract CorporateBondRepayVaultTest is Test {
         vm.expectEmit(true, true, true, true);
         emit ICorporateBondRepayVault.InterestPaid(interestAmount, debtor, creditor);
         vault.deposit(interestAmount, false);
+        vm.stopPrank();
+    }
+
+    function testEmitsVaultFeesSetEvent() public {
+        vm.startPrank(owner);
+
+        vm.expectEmit(true, true, true, true);
+        emit ICorporateBondRepayVault.VaultFeesSet(VAULT_FEES_BIPS, 200);
+        vault.setVaultFeesBips(200);
+
         vm.stopPrank();
     }
 }
