@@ -22,6 +22,7 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     IERC721 public immutable bondNFTContract;
     uint256 public immutable bondNFTTokenId;
     uint256 public immutable debtAmount;
+    uint64 public immutable bondMaturity;
 
     // Whether the principal has been paid to the debtor
     bool public principalPaid;
@@ -39,7 +40,8 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         uint256 debtAmount_,
         bool principalPaid_,
         uint256 principalRepaid_,
-        uint48 vaultFeesBips_
+        uint48 vaultFeesBips_,
+        uint64 bondMaturity_
     ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") Ownable(owner_) {
         if (debtor_ == address(0)) {
             revert ZeroAddress();
@@ -52,6 +54,7 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         principalPaid = principalPaid_;
         principalRepaid = principalRepaid_;
         vaultFeesBips = vaultFeesBips_;
+        bondMaturity = bondMaturity_;
     }
 
     function setVaultFeesBips(

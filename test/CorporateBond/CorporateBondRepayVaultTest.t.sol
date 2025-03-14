@@ -47,7 +47,16 @@ contract CorporateBondRepayVaultTest is Test {
 
         // Deploy vault
         vault = new CorporateBondRepayVault(
-            owner, bond, tokenId, debtor, token, DEBT_AMOUNT, false, 0, VAULT_FEES_BIPS
+            owner,
+            bond,
+            tokenId,
+            debtor,
+            token,
+            DEBT_AMOUNT,
+            false,
+            0,
+            VAULT_FEES_BIPS,
+            uint64(block.timestamp + 365 days)
         );
     }
 
