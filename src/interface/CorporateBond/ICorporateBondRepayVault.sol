@@ -18,6 +18,8 @@ interface ICorporateBondRepayVault is IERC4626 {
     error PrincipalAlreadyPaid();
     error PrincipalNotPaid();
     error StandardDepositOrMintNotAllowed();
+    error ZeroAmount();
+    error ExcessiveVaultFees(uint48 bips);
 
     /**
      * @notice Deposits assets into the vault.

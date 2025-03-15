@@ -68,27 +68,7 @@ contract CorporateBondRepayVaultTest is Test {
         _;
     }
 
-    function testVaultOwnerCanSetVaultFeesBips() public {
-        vm.startPrank(owner);
-        vault.setVaultFeesBips(200);
-        vm.stopPrank();
-
-        assertEq(vault.vaultFeesBips(), 200);
-    }
-
-    function testNonDebtorCannotDeposit() public {
-        uint256 depositAmount = 10 ether;
-        token.mint(owner, depositAmount);
-
-        vm.startPrank(owner);
-        token.approve(address(vault), depositAmount);
-        vm.expectRevert(
-            abi.encodeWithSelector(ICorporateBondRepayVault.OnlyDebtor.selector, owner, debtor)
-        );
-        vault.deposit(depositAmount, false);
-        vm.stopPrank();
-    }
-
+    // Principal-related tests
     function testCreditorCanDepositPrincipal() public {
         assertEq(vault.balanceOf(debtor), 0);
         vm.startPrank(creditor);
@@ -98,35 +78,6 @@ contract CorporateBondRepayVaultTest is Test {
 
         assertEq(vault.balanceOf(debtor), DEBT_AMOUNT);
         assertTrue(vault.principalPaid());
-    }
-
-    function testDebtorCanRepayPrincipal() public principalPaid {
-        // Debtor repays principal
-        vm.startPrank(debtor);
-        token.approve(address(vault), DEBT_AMOUNT);
-        vault.deposit(DEBT_AMOUNT, true);
-        vm.stopPrank();
-
-        assertEq(vault.balanceOf(creditor), DEBT_AMOUNT);
-        assertEq(vault.principalRepaid(), DEBT_AMOUNT);
-    }
-
-    function testDebtorCanPayInterest(
-        uint256 interestAmount
-    ) public principalPaid {
-        vm.assume(interestAmount < type(uint256).max / VAULT_FEES_BIPS);
-        token.mint(debtor, interestAmount);
-
-        uint256 fees = (interestAmount * VAULT_FEES_BIPS) / 10_000;
-        uint256 netInterestAmount = interestAmount - fees;
-
-        vm.startPrank(debtor);
-        token.approve(address(vault), interestAmount);
-        vault.deposit(interestAmount, false);
-        vm.stopPrank();
-
-        assertEq(vault.balanceOf(creditor), netInterestAmount);
-        assertEq(vault.balanceOf(owner), fees);
     }
 
     function testCreditorCannotDepositPrincipalTwice() public principalPaid {
@@ -148,6 +99,76 @@ contract CorporateBondRepayVaultTest is Test {
         vm.stopPrank();
     }
 
+    function testDebtorCanWithdrawPrincipal() public principalPaid {
+        // Debtor withdraws principal
+        vm.startPrank(debtor);
+        vault.withdraw(DEBT_AMOUNT, debtor, debtor);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(debtor), DEBT_AMOUNT * 2); // Initial balance + withdrawn principal
+        assertEq(vault.balanceOf(debtor), 0);
+        assertTrue(vault.principalPaid());
+    }
+
+    function testDebtorCanRepayPrincipal() public principalPaid {
+        // Debtor repays principal
+        vm.startPrank(debtor);
+        token.approve(address(vault), DEBT_AMOUNT);
+        vault.deposit(DEBT_AMOUNT, true);
+        vm.stopPrank();
+
+        assertEq(vault.balanceOf(creditor), DEBT_AMOUNT);
+        assertEq(vault.principalRepaid(), DEBT_AMOUNT);
+    }
+
+    function testCreditorCanWithdrawRepaidPrincipal() public principalPaid {
+        // Debtor repays principal
+        vm.startPrank(debtor);
+        token.approve(address(vault), DEBT_AMOUNT);
+        vault.deposit(DEBT_AMOUNT, true);
+        vm.stopPrank();
+
+        // Creditor withdraws principal
+        vm.startPrank(creditor);
+        vault.withdraw(DEBT_AMOUNT, creditor, creditor);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(creditor), DEBT_AMOUNT);
+        assertEq(vault.balanceOf(creditor), 0);
+    }
+
+    // Interest and fees tests
+    function testDebtorCanPayInterest(
+        uint256 interestAmount
+    ) public principalPaid {
+        vm.assume(interestAmount < type(uint256).max / VAULT_FEES_BIPS);
+        token.mint(debtor, interestAmount);
+
+        uint256 fees = (interestAmount * VAULT_FEES_BIPS) / 10_000;
+        uint256 netInterestAmount = interestAmount - fees;
+
+        vm.startPrank(debtor);
+        token.approve(address(vault), interestAmount);
+        vault.deposit(interestAmount, false);
+        vm.stopPrank();
+
+        assertEq(vault.balanceOf(creditor), netInterestAmount);
+        assertEq(vault.balanceOf(owner), fees);
+    }
+
+    function testNonDebtorCannotDeposit() public {
+        uint256 depositAmount = 10 ether;
+        token.mint(owner, depositAmount);
+
+        vm.startPrank(owner);
+        token.approve(address(vault), depositAmount);
+        vm.expectRevert(
+            abi.encodeWithSelector(ICorporateBondRepayVault.OnlyDebtor.selector, owner, debtor)
+        );
+        vault.deposit(depositAmount, false);
+        vm.stopPrank();
+    }
+
     function testStandardDepositNotAllowed() public {
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -157,6 +178,36 @@ contract CorporateBondRepayVaultTest is Test {
         vault.deposit(10 ether, address(this));
     }
 
+    function testVaultOwnerCanSetVaultFeesBips() public {
+        vm.startPrank(owner);
+        vault.setVaultFeesBips(200);
+        vm.stopPrank();
+
+        assertEq(vault.vaultFeesBips(), 200);
+    }
+
+    function testOwnerCanWithdrawFees() public {
+        uint256 interestAmount = 100 ether;
+        token.mint(debtor, interestAmount);
+
+        // Debtor pays interest, generating fees
+        vm.startPrank(debtor);
+        token.approve(address(vault), interestAmount);
+        vault.deposit(interestAmount, false);
+        vm.stopPrank();
+
+        uint256 fees = (interestAmount * VAULT_FEES_BIPS) / 10_000;
+
+        // Owner withdraws fees
+        vm.startPrank(owner);
+        vault.withdraw(fees, owner, owner);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(owner), fees);
+        assertEq(vault.balanceOf(owner), 0);
+    }
+
+    // Event emission tests
     function testEmitsPrincipalPaidEvent() public {
         vm.startPrank(creditor);
         token.approve(address(vault), DEBT_AMOUNT);

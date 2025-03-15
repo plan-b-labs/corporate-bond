@@ -31,6 +31,8 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     // The amount of fees paid to the vault in bips
     uint48 public vaultFeesBips;
 
+    uint48 constant MAX_VAULT_FEES_BIPS = 1000; // 10%
+
     constructor(
         address owner_,
         IERC721 bondNFTContract_,
@@ -47,6 +49,17 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
             revert ZeroAddress();
         }
 
+        if (debtAmount_ == 0) {
+            revert ZeroAmount();
+        }
+
+        if (vaultFeesBips_ > MAX_VAULT_FEES_BIPS) {
+            revert ExcessiveVaultFees(vaultFeesBips_);
+        }
+
+        // Check that the NFT exists by trying to get its owner
+        bondNFTContract_.ownerOf(bondNFTTokenId_);
+
         debtor = debtor_;
         bondNFTContract = bondNFTContract_;
         bondNFTTokenId = bondNFTTokenId_;
@@ -60,6 +73,9 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     function setVaultFeesBips(
         uint48 vaultFeesBips_
     ) external onlyOwner {
+        if (vaultFeesBips_ > MAX_VAULT_FEES_BIPS) {
+            revert ExcessiveVaultFees(vaultFeesBips_);
+        }
         uint48 oldBips = vaultFeesBips;
         vaultFeesBips = vaultFeesBips_;
         emit VaultFeesSet(oldBips, vaultFeesBips_);
