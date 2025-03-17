@@ -9,6 +9,8 @@ out/
 
 # Docs
 docs/
+## Markdown PDF exports
+*.pdf
 
 # Dotenv file
 .env
