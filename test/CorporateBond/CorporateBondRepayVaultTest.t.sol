@@ -7,6 +7,7 @@ import {
     CorporateBondRepayVault,
     ICorporateBondRepayVault
 } from "../../src/contracts/CorporateBond/CorporateBondRepayVault.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Test} from "forge-std/Test.sol";
 
@@ -26,15 +27,17 @@ contract CorporateBondRepayVaultTest is Test {
     address public owner;
     address public debtor;
     address public creditor;
+    address public feesRecipient;
     uint256 public tokenId;
 
     uint256 constant DEBT_AMOUNT = 1000 ether;
-    uint48 constant VAULT_FEES_BIPS = 100;
+    uint48 constant FEES_BIPS = 100;
 
     function setUp() public {
         owner = makeAddr("owner");
         debtor = makeAddr("debtor");
         creditor = makeAddr("creditor");
+        feesRecipient = makeAddr("feesRecipient");
 
         // Deploy mock ERC20 token
         token = new MockERC20();
@@ -53,10 +56,11 @@ contract CorporateBondRepayVaultTest is Test {
             debtor,
             token,
             DEBT_AMOUNT,
+            uint64(block.timestamp + 365 days),
             false,
             0,
-            VAULT_FEES_BIPS,
-            uint64(block.timestamp + 365 days)
+            FEES_BIPS,
+            feesRecipient
         );
     }
 
@@ -141,10 +145,10 @@ contract CorporateBondRepayVaultTest is Test {
     function testDebtorCanPayInterest(
         uint256 interestAmount
     ) public principalPaid {
-        vm.assume(interestAmount < type(uint256).max / VAULT_FEES_BIPS);
+        vm.assume(interestAmount < type(uint256).max / FEES_BIPS);
         token.mint(debtor, interestAmount);
 
-        uint256 fees = (interestAmount * VAULT_FEES_BIPS) / 10_000;
+        uint256 fees = (interestAmount * FEES_BIPS) / 10_000;
         uint256 netInterestAmount = interestAmount - fees;
 
         vm.startPrank(debtor);
@@ -153,7 +157,7 @@ contract CorporateBondRepayVaultTest is Test {
         vm.stopPrank();
 
         assertEq(vault.balanceOf(creditor), netInterestAmount);
-        assertEq(vault.balanceOf(owner), fees);
+        assertEq(vault.balanceOf(feesRecipient), fees);
     }
 
     function testNonDebtorCannotDeposit() public {
@@ -180,13 +184,13 @@ contract CorporateBondRepayVaultTest is Test {
 
     function testVaultOwnerCanSetVaultFeesBips() public {
         vm.startPrank(owner);
-        vault.setVaultFeesBips(200);
+        vault.setFeesBips(200);
         vm.stopPrank();
 
-        assertEq(vault.vaultFeesBips(), 200);
+        assertEq(vault.feesBips(), 200);
     }
 
-    function testOwnerCanWithdrawFees() public {
+    function testFeesRecipientCanWithdrawFees() public {
         uint256 interestAmount = 100 ether;
         token.mint(debtor, interestAmount);
 
@@ -196,15 +200,43 @@ contract CorporateBondRepayVaultTest is Test {
         vault.deposit(interestAmount, false);
         vm.stopPrank();
 
-        uint256 fees = (interestAmount * VAULT_FEES_BIPS) / 10_000;
+        uint256 fees = (interestAmount * FEES_BIPS) / 10_000;
 
-        // Owner withdraws fees
-        vm.startPrank(owner);
-        vault.withdraw(fees, owner, owner);
+        // Fees recipient withdraws fees
+        vm.startPrank(feesRecipient);
+        vault.withdraw(fees, feesRecipient, feesRecipient);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(owner), fees);
-        assertEq(vault.balanceOf(owner), 0);
+        assertEq(token.balanceOf(feesRecipient), fees);
+        assertEq(vault.balanceOf(feesRecipient), 0);
+    }
+
+    function testOwnerCanSetFeesRecipient() public {
+        address newFeesRecipient = makeAddr("newFeesRecipient");
+
+        vm.startPrank(owner);
+        vm.expectEmit(true, true, true, true);
+        emit ICorporateBondRepayVault.FeesRecipientSet(newFeesRecipient);
+        vault.setFeesRecipient(newFeesRecipient);
+        vm.stopPrank();
+
+        assertEq(vault.feesRecipient(), newFeesRecipient);
+    }
+
+    function testNonOwnerCannotSetFeesRecipient() public {
+        address newFeesRecipient = makeAddr("newFeesRecipient");
+
+        vm.startPrank(debtor);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, debtor));
+        vault.setFeesRecipient(newFeesRecipient);
+        vm.stopPrank();
+    }
+
+    function testCannotSetZeroAddressAsFeesRecipient() public {
+        vm.startPrank(owner);
+        vm.expectRevert(abi.encodeWithSelector(ICorporateBondRepayVault.ZeroAddress.selector));
+        vault.setFeesRecipient(address(0));
+        vm.stopPrank();
     }
 
     // Event emission tests
@@ -244,8 +276,8 @@ contract CorporateBondRepayVaultTest is Test {
         vm.startPrank(owner);
 
         vm.expectEmit(true, true, true, true);
-        emit ICorporateBondRepayVault.VaultFeesSet(VAULT_FEES_BIPS, 200);
-        vault.setVaultFeesBips(200);
+        emit ICorporateBondRepayVault.FeesSet(200);
+        vault.setFeesBips(200);
 
         vm.stopPrank();
     }

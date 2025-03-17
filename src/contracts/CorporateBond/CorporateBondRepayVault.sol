@@ -23,15 +23,16 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     uint256 public immutable bondNFTTokenId;
     uint256 public immutable debtAmount;
     uint64 public immutable bondMaturity;
+    address public feesRecipient;
 
     // Whether the principal has been paid to the debtor
     bool public principalPaid;
     // The amount of principal repaid to the creditor
     uint256 public principalRepaid;
     // The amount of fees paid to the vault in bips
-    uint48 public vaultFeesBips;
+    uint48 public feesBips;
 
-    uint48 constant MAX_VAULT_FEES_BIPS = 1000; // 10%
+    uint48 constant MAX_FEES_BIPS = 1000; // 10%
 
     constructor(
         address owner_,
@@ -40,10 +41,11 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         address debtor_,
         IERC20 repayAsset_,
         uint256 debtAmount_,
+        uint64 bondMaturity_,
         bool principalPaid_,
         uint256 principalRepaid_,
-        uint48 vaultFeesBips_,
-        uint64 bondMaturity_
+        uint48 feesBips_,
+        address feesRecipient_
     ) ERC4626(repayAsset_) ERC20("CorporateBondRepayVault", "CBRV") Ownable(owner_) {
         if (debtor_ == address(0)) {
             revert ZeroAddress();
@@ -53,8 +55,12 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
             revert ZeroAmount();
         }
 
-        if (vaultFeesBips_ > MAX_VAULT_FEES_BIPS) {
-            revert ExcessiveVaultFees(vaultFeesBips_);
+        if (feesBips_ > MAX_FEES_BIPS) {
+            revert ExcessiveVaultFees(feesBips_);
+        }
+
+        if (feesRecipient_ == address(0)) {
+            revert ZeroAddress();
         }
 
         // Check that the NFT exists by trying to get its owner
@@ -66,19 +72,34 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         debtAmount = debtAmount_;
         principalPaid = principalPaid_;
         principalRepaid = principalRepaid_;
-        vaultFeesBips = vaultFeesBips_;
+        feesBips = feesBips_;
         bondMaturity = bondMaturity_;
+        feesRecipient = feesRecipient_;
+
+        emit FeesSet(feesBips_);
+        emit FeesRecipientSet(feesRecipient_);
     }
 
-    function setVaultFeesBips(
-        uint48 vaultFeesBips_
+    /// @inheritdoc ICorporateBondRepayVault
+    function setFeesRecipient(
+        address newFeesRecipient
     ) external onlyOwner {
-        if (vaultFeesBips_ > MAX_VAULT_FEES_BIPS) {
-            revert ExcessiveVaultFees(vaultFeesBips_);
+        if (newFeesRecipient == address(0)) {
+            revert ZeroAddress();
         }
-        uint48 oldBips = vaultFeesBips;
-        vaultFeesBips = vaultFeesBips_;
-        emit VaultFeesSet(oldBips, vaultFeesBips_);
+        feesRecipient = newFeesRecipient;
+        emit FeesRecipientSet(newFeesRecipient);
+    }
+
+    /// @inheritdoc ICorporateBondRepayVault
+    function setFeesBips(
+        uint48 feesBips_
+    ) external onlyOwner {
+        if (feesBips_ > MAX_FEES_BIPS) {
+            revert ExcessiveVaultFees(feesBips_);
+        }
+        feesBips = feesBips_;
+        emit FeesSet(feesBips_);
     }
 
     /// @inheritdoc ICorporateBondRepayVault
@@ -130,14 +151,14 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
             }
 
             // Calculate the amount of fees to pay to the vault
-            uint256 fees = (assets * vaultFeesBips) / 10_000;
+            uint256 fees = (assets * feesBips) / 10_000;
             // Subtract the fees from the amount of interest to pay
             uint256 netAssets = assets - fees;
 
             emit InterestPaid(assets, debtor, _creditor);
 
-            // Deposit the fees to the vault owner
-            super.deposit(fees, owner());
+            // Deposit the fees to the vault fee recipient
+            super.deposit(fees, feesRecipient);
             // Deposit to creditor
             return super.deposit(netAssets, _creditor);
         }
@@ -159,6 +180,7 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
         revert StandardDepositOrMintNotAllowed();
     }
 
+    /// @inheritdoc ICorporateBondRepayVault
     function creditor() public view returns (address) {
         return bondNFTContract.ownerOf(bondNFTTokenId);
     }

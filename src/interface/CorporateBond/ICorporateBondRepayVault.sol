@@ -9,7 +9,8 @@ interface ICorporateBondRepayVault is IERC4626 {
     event PrincipalPaid(uint256 amount, address creditor, address debtor);
     event PrincipalRepaid(uint256 amount, address debtor, address creditor);
     event InterestPaid(uint256 amount, address debtor, address creditor);
-    event VaultFeesSet(uint48 oldBips, uint48 newBips);
+    event FeesSet(uint48 bips);
+    event FeesRecipientSet(address recipient);
 
     error ZeroAddress();
     error OnlyDebtor(address addr, address debtor);
@@ -36,4 +37,26 @@ interface ICorporateBondRepayVault is IERC4626 {
 
     /// @dev Standard ERC4626 mint not allowed
     function mint(uint256 shares, address receiver) external returns (uint256 assets);
+
+    /**
+     * @notice Sets the vault fees recipient.
+     * @param newFeesRecipient The new fees recipient.
+     */
+    function setFeesRecipient(
+        address newFeesRecipient
+    ) external;
+
+    /**
+     * @notice Sets the vault fees.
+     * @param newFeesBips The new fees in bips.
+     */
+    function setFeesBips(
+        uint48 newFeesBips
+    ) external;
+
+    /**
+     * @notice Returns the creditor of the vault.
+     * @return The creditor of the vault.
+     */
+    function creditor() external view returns (address);
 }
