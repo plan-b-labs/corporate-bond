@@ -79,24 +79,94 @@ Defines the contract interface including:
 
 ## Usage Flow
 
-1. Bond Issuance
+### 1. Bond Issuance & Setup
 
-   - Bond is minted to creditor via `CorporateBond` contract
-   - `RepayVault` is deployed with bond details and parameters
-   - Initial fees recipient is set during deployment
+- Bond is minted to creditor via `CorporateBond` contract
+- `RepayVault` is deployed with bond details and parameters
+- Initial fees recipient is set during deployment
 
-2. Principal Payment
+```mermaid
+sequenceDiagram
+    participant Owner
+    participant CorporateBond
+    participant RepayVault
+    participant Creditor
 
-   - Creditor deposits principal to vault
-   - Debtor withdraws principal from vault
+    Owner->>CorporateBond: Deploy
+    Owner->>CorporateBond: safeMint(creditor, uri)
+    CorporateBond-->>Creditor: Transfer NFT
+    Owner->>RepayVault: Deploy(bondNFT, debtor, token, ...)
+```
 
-3. Repayment
+### 2. Principal Payment
 
-   - Debtor makes interest payments through vault
-   - Debtor eventually repays principal through vault
-   - Creditor can withdraw repaid principal and interest
+- Creditor deposits principal to vault
+- Debtor withdraws principal from vault
 
-4. Fee Collection
-   - Fees recipient can withdraw accumulated fees
-   - Vault owner can adjust fee rate within limits
-   - Vault owner can update fees recipient address
+```mermaid
+sequenceDiagram
+    participant Creditor
+    participant RepayVault
+    participant Debtor
+
+    Creditor->>RepayVault: deposit(principal=true)
+    Note over RepayVault: Validates amount matches debtAmount
+    RepayVault-->>Debtor: Credit principal shares
+    Debtor->>RepayVault: withdraw()
+    RepayVault-->>Debtor: Transfer principal tokens
+
+    Note over RepayVault: Later...
+
+    Debtor->>RepayVault: deposit(principal=true)
+    RepayVault-->>Creditor: Credit repaid principal shares
+    Creditor->>RepayVault: withdraw()
+    RepayVault-->>Creditor: Transfer repaid principal tokens
+```
+
+### 3. Interest Payment & Principal Repayment
+
+- Debtor makes interest payments through vault
+- Debtor eventually repays principal through vault
+- Creditor can withdraw repaid principal and interest
+
+Flow for interest payment:
+
+```mermaid
+sequenceDiagram
+    participant Debtor
+    participant RepayVault
+    participant Creditor
+    participant FeesRecipient
+
+    Debtor->>RepayVault: deposit(principal=false)
+    Note over RepayVault: Calculate fees
+    RepayVault-->>FeesRecipient: Credit fee shares
+    RepayVault-->>Creditor: Credit net interest shares
+
+    Creditor->>RepayVault: withdraw()
+    RepayVault-->>Creditor: Transfer net interest tokens
+    FeesRecipient->>RepayVault: withdraw()
+    RepayVault-->>FeesRecipient: Transfer fee tokens
+```
+
+### 4. Fee Collection
+
+- Fees recipient can withdraw accumulated fees
+- Vault owner can adjust fee rate within limits
+- Vault owner can update fees recipient address
+
+```mermaid
+sequenceDiagram
+    participant Owner
+    participant RepayVault
+    participant FeesRecipient
+    participant NewFeesRecipient
+
+    Owner->>RepayVault: setFeesBips(newBips)
+    Note over RepayVault: Validate <= MAX_FEES_BIPS
+    RepayVault-->>RepayVault: Update feesBips
+
+    Owner->>RepayVault: setFeesRecipient(newRecipient)
+    Note over RepayVault: Validate non-zero address
+    RepayVault-->>RepayVault: Update feesRecipient
+```
