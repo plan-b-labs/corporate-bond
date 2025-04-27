@@ -7,3 +7,6 @@
 [submodule "lib/foundry-starter-kit"]
 	path = lib/foundry-starter-kit
 	url = https://github.com/smartcontractkit/foundry-starter-kit
+[submodule "lib/icm-contracts"]
+	path = lib/icm-contracts
+	url = https://github.com/labs/icm-contracts
