@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import {ChainlinkPriceFeedScraper} from "../src/contracts/PriceOracle/ChainlinkPriceFeedScraper.sol";
+import {ChainlinkPriceFeedScraper} from
+    "../../src/contracts/PriceOracle/ChainlinkPriceFeedScraper.sol";
 import {Script} from "forge-std/Script.sol";
 
 contract DeployChainlinkPriceFeedScraper is Script {
