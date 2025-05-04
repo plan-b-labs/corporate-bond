@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.25;
 
 interface ICorporateBondRepayVaultFactory {
     event VaultCreated(
@@ -42,6 +42,7 @@ interface ICorporateBondRepayVaultFactory {
         bool principalPaid,
         uint256 principalRepaid,
         uint48 feesBips,
-        address feesRecipient
+        address feesRecipient,
+        address priceFeed
     ) external returns (address vault);
 }

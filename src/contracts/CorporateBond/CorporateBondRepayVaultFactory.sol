@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.25;
 
 import {ICorporateBondRepayVaultFactory} from
     "../../interface/CorporateBond/ICorporateBondRepayVaultFactory.sol";
@@ -24,7 +24,8 @@ contract CorporateBondRepayVaultFactory is ICorporateBondRepayVaultFactory, Owna
         bool principalPaid,
         uint256 principalRepaid,
         uint48 feesBips,
-        address feesRecipient
+        address feesRecipient,
+        address priceFeed
     ) external returns (address vault) {
         // Check that bond maturity is in the future
         if (bondMaturity <= uint64(block.timestamp)) {
@@ -44,7 +45,8 @@ contract CorporateBondRepayVaultFactory is ICorporateBondRepayVaultFactory, Owna
                 principalPaid,
                 principalRepaid,
                 feesBips,
-                feesRecipient
+                feesRecipient,
+                priceFeed
             )
         );
 

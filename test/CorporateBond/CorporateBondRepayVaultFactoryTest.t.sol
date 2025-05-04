@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.25;
 
 import {CorporateBond} from "../../src/contracts/CorporateBond/CorporateBond.sol";
 import {CorporateBondRepayVault} from
@@ -28,6 +28,7 @@ contract CorporateBondRepayVaultFactoryTest is Test {
     address public debtor;
     address public creditor;
     address public feesRecipient;
+    address public priceFeed;
     uint256 public tokenId;
 
     uint256 constant DEBT_AMOUNT = 1000 ether;
@@ -39,6 +40,7 @@ contract CorporateBondRepayVaultFactoryTest is Test {
         debtor = makeAddr("debtor");
         creditor = makeAddr("creditor");
         feesRecipient = makeAddr("feesRecipient");
+        priceFeed = makeAddr("priceFeed");
 
         // Deploy mock ERC20 token
         token = new MockERC20();
@@ -79,7 +81,8 @@ contract CorporateBondRepayVaultFactoryTest is Test {
             false,
             0,
             FEES_BIPS,
-            feesRecipient
+            feesRecipient,
+            priceFeed
         );
 
         CorporateBondRepayVault vaultContract = CorporateBondRepayVault(vault);
@@ -117,7 +120,8 @@ contract CorporateBondRepayVaultFactoryTest is Test {
             false,
             0,
             FEES_BIPS,
-            feesRecipient
+            feesRecipient,
+            priceFeed
         );
     }
 
@@ -134,7 +138,8 @@ contract CorporateBondRepayVaultFactoryTest is Test {
             true,
             DEBT_AMOUNT / 2,
             FEES_BIPS,
-            feesRecipient
+            feesRecipient,
+            priceFeed
         );
 
         CorporateBondRepayVault vaultContract = CorporateBondRepayVault(vault);
@@ -157,7 +162,8 @@ contract CorporateBondRepayVaultFactoryTest is Test {
             false,
             0,
             FEES_BIPS,
-            feesRecipient
+            feesRecipient,
+            priceFeed
         );
 
         assertTrue(vault != address(0));
