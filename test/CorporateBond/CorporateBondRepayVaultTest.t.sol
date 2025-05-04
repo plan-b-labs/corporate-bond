@@ -53,15 +53,12 @@ contract CorporateBondRepayVaultTest is Test {
     address public feesRecipient;
     uint256 public tokenId;
 
-    int256 constant INITIAL_PRICE = 100_000e8; // $100,000
+    int256 constant INITIAL_PRICE = 10_156_452_126_332; // $101,564.52126332
     uint256 constant DEBT_AMOUNT = 10_000_000e8; // $10,000,000
     uint48 constant FEES_BIPS = 100; // 1%
     uint8 constant TOKEN_DECIMALS = 8;
     uint8 constant PRICE_FEED_DECIMALS = 8;
-
-    // Calculate required token amount: $10M / $100k = 100 BTC
-    uint256 constant TOKEN_DEPOSIT_AMOUNT =
-        DEBT_AMOUNT / uint256(INITIAL_PRICE) * (10 ** TOKEN_DECIMALS);
+    uint256 constant TOKEN_DEPOSIT_AMOUNT = 100e8; // 100 BTC
 
     WarpMessengerMock private mockWarpMessenger;
     TeleporterMessenger public teleporterMessenger;
@@ -138,9 +135,23 @@ contract CorporateBondRepayVaultTest is Test {
     modifier principalPaid() {
         vm.startPrank(creditor);
         token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
         _;
+    }
+
+    function _calculateValue(
+        uint256 assets
+    ) internal pure returns (uint256) {
+        // Convert BTC amount to USD: BTC * price in USD
+        // Example: 100 BTC * $100,000 = $10M
+        return (assets * uint256(INITIAL_PRICE)) / (10 ** TOKEN_DECIMALS);
+    }
+
+    function _calculateAssets(
+        uint256 targetValue
+    ) internal pure returns (uint256) {
+        return (targetValue * (10 ** TOKEN_DECIMALS)) / uint256(INITIAL_PRICE);
     }
 
     // Principal-related tests
@@ -148,10 +159,10 @@ contract CorporateBondRepayVaultTest is Test {
         assertEq(vault.balanceOf(debtor), 0);
         vm.startPrank(creditor);
         token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
 
-        assertEq(vault.balanceOf(debtor), TOKEN_DEPOSIT_AMOUNT);
+        assertEq(vault.balanceOf(debtor), _calculateAssets(DEBT_AMOUNT));
         assertTrue(vault.principalPaid());
     }
 
@@ -162,7 +173,7 @@ contract CorporateBondRepayVaultTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ICorporateBondRepayVault.PrincipalAlreadyPaid.selector)
         );
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
     }
 
@@ -170,17 +181,17 @@ contract CorporateBondRepayVaultTest is Test {
         vm.startPrank(debtor);
         token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
         vm.expectRevert(abi.encodeWithSelector(ICorporateBondRepayVault.PrincipalNotPaid.selector));
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
     }
 
     function testDebtorCanWithdrawPrincipal() public principalPaid {
         // Debtor withdraws principal
         vm.startPrank(debtor);
-        vault.withdraw(TOKEN_DEPOSIT_AMOUNT, debtor, debtor);
+        vault.withdraw(_calculateAssets(DEBT_AMOUNT), debtor, debtor);
         vm.stopPrank();
 
-        assertEq(token.balanceOf(debtor), TOKEN_DEPOSIT_AMOUNT * 2); // Initial balance + withdrawn principal
+        assertEq(token.balanceOf(debtor), TOKEN_DEPOSIT_AMOUNT + _calculateAssets(DEBT_AMOUNT)); // Initial balance + withdrawn principal
         assertEq(vault.balanceOf(debtor), 0);
         assertTrue(vault.principalPaid());
     }
@@ -189,10 +200,10 @@ contract CorporateBondRepayVaultTest is Test {
         // Debtor repays principal
         vm.startPrank(debtor);
         token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
 
-        assertEq(vault.balanceOf(creditor), TOKEN_DEPOSIT_AMOUNT);
+        assertEq(vault.balanceOf(creditor), _calculateAssets(DEBT_AMOUNT));
         assertEq(vault.principalRepaid(), DEBT_AMOUNT);
     }
 
@@ -200,12 +211,12 @@ contract CorporateBondRepayVaultTest is Test {
         // Debtor repays principal
         vm.startPrank(debtor);
         token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
 
         // Creditor withdraws principal
         vm.startPrank(creditor);
-        vault.withdraw(TOKEN_DEPOSIT_AMOUNT, creditor, creditor);
+        vault.withdraw(_calculateAssets(DEBT_AMOUNT), creditor, creditor);
         vm.stopPrank();
 
         assertEq(token.balanceOf(creditor), TOKEN_DEPOSIT_AMOUNT);
@@ -218,14 +229,16 @@ contract CorporateBondRepayVaultTest is Test {
     ) public principalPaid {
         // Bound interest amount between 0.01 BTC and 100 BTC
         interestAmount = bound(interestAmount, 1e6, 1e10);
+
+        uint256 targetInterestValue = _calculateValue(interestAmount);
         token.mint(debtor, interestAmount);
 
-        uint256 fees = (interestAmount * FEES_BIPS) / 10_000;
-        uint256 netInterestAmount = interestAmount - fees;
+        uint256 fees = (_calculateAssets(targetInterestValue) * FEES_BIPS) / 10_000;
+        uint256 netInterestAmount = _calculateAssets(targetInterestValue) - fees;
 
         vm.startPrank(debtor);
         token.approve(address(vault), interestAmount);
-        vault.deposit(interestAmount, false);
+        vault.deposit(interestAmount, targetInterestValue, false);
         vm.stopPrank();
 
         assertEq(vault.balanceOf(creditor), netInterestAmount);
@@ -241,7 +254,7 @@ contract CorporateBondRepayVaultTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(ICorporateBondRepayVault.OnlyDebtor.selector, owner, debtor)
         );
-        vault.deposit(depositAmount, false);
+        vault.deposit(depositAmount, DEBT_AMOUNT, false);
         vm.stopPrank();
     }
 
@@ -263,16 +276,17 @@ contract CorporateBondRepayVaultTest is Test {
     }
 
     function testFeesRecipientCanWithdrawFees() public {
-        uint256 interestAmount = 100 ether;
+        uint256 interestAmount = 1e7;
+        uint256 targetInterestValue = 10_000e8;
         token.mint(debtor, interestAmount);
 
         // Debtor pays interest, generating fees
         vm.startPrank(debtor);
         token.approve(address(vault), interestAmount);
-        vault.deposit(interestAmount, false);
+        (, uint256 assetsDeposited) = vault.deposit(interestAmount, targetInterestValue, false);
         vm.stopPrank();
 
-        uint256 fees = (interestAmount * FEES_BIPS) / 10_000;
+        uint256 fees = (assetsDeposited * FEES_BIPS) / 10_000;
 
         // Fees recipient withdraws fees
         vm.startPrank(feesRecipient);
@@ -311,25 +325,17 @@ contract CorporateBondRepayVaultTest is Test {
         vm.stopPrank();
     }
 
-    // Event emission tests
-    function _calculateValue(
-        uint256 assets
-    ) internal pure returns (uint256) {
-        // Convert BTC amount to USD: BTC * price in USD
-        // Example: 100 BTC * $100,000 = $10M
-        return (assets * uint256(INITIAL_PRICE)) / (10 ** TOKEN_DECIMALS);
-    }
-
     function testEmitsPrincipalPaidEvent() public {
-        uint256 assets = TOKEN_DEPOSIT_AMOUNT;
         uint256 value = DEBT_AMOUNT; // The USD value should match the debt amount
 
         vm.startPrank(creditor);
-        token.approve(address(vault), assets);
+        token.approve(address(vault), TOKEN_DEPOSIT_AMOUNT);
 
         vm.expectEmit(true, true, true, true);
-        emit ICorporateBondRepayVault.PrincipalPaid(assets, value, creditor, debtor);
-        vault.deposit(assets, true);
+        emit ICorporateBondRepayVault.PrincipalPaid(
+            _calculateAssets(DEBT_AMOUNT), value, creditor, debtor
+        );
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
     }
 
@@ -339,22 +345,24 @@ contract CorporateBondRepayVaultTest is Test {
 
         vm.expectEmit(true, true, true, true);
         emit ICorporateBondRepayVault.PrincipalRepaid(
-            TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, debtor, creditor
+            _calculateAssets(DEBT_AMOUNT), DEBT_AMOUNT, debtor, creditor
         );
-        vault.deposit(TOKEN_DEPOSIT_AMOUNT, true);
+        vault.deposit(TOKEN_DEPOSIT_AMOUNT, DEBT_AMOUNT, true);
         vm.stopPrank();
     }
 
     function testEmitsInterestPaidEvent() public {
         uint256 interestAmount = 1e7; // 0.1 BTC
-        uint256 value = _calculateValue(interestAmount);
+        uint256 targetInterestValue = 10_000e8;
 
         vm.startPrank(debtor);
         token.approve(address(vault), interestAmount);
 
         vm.expectEmit(true, true, true, true);
-        emit ICorporateBondRepayVault.InterestPaid(interestAmount, value, debtor, creditor);
-        vault.deposit(interestAmount, false);
+        emit ICorporateBondRepayVault.InterestPaid(
+            _calculateAssets(targetInterestValue), targetInterestValue, debtor, creditor
+        );
+        vault.deposit(interestAmount, targetInterestValue, false);
         vm.stopPrank();
     }
 

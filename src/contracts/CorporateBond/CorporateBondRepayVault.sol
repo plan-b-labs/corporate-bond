@@ -108,13 +108,16 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
     }
 
     /**
-     * @dev Prices an amount of assets using the price feed
-     * Reverts if price is stale or invalid
+     * @dev Calculates required assets for a target value using the price feed
+     * @param targetValue The target value in price feed units
+     * @return requiredAssets The amount of assets needed
+     * @return price The current price used for calculation
      */
-    function _priceAssets(
-        uint256 assetAmount
-    ) internal view returns (uint256) {
-        (, int256 price,, uint256 updatedAt,) = priceFeed.latestRoundData();
+    function _calculateRequiredAssets(
+        uint256 targetValue
+    ) internal view returns (uint256 requiredAssets, int256 price) {
+        uint256 updatedAt;
+        (, price,, updatedAt,) = priceFeed.latestRoundData();
 
         // Check for stale price (25 hours)
         if (block.timestamp - updatedAt > 25 hours) {
@@ -126,13 +129,25 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
             revert InvalidPriceValue(price);
         }
 
-        uint256 assetDecimals = decimals();
-
-        return (assetAmount * uint256(price)) / (10 ** assetDecimals);
+        // Calculate required assets: targetValue * 10^decimals / price
+        requiredAssets = (targetValue * (10 ** decimals())) / uint256(price);
     }
 
-    function deposit(uint256 assets, bool principal) public returns (uint256 shares) {
+    /// @inheritdoc ICorporateBondRepayVault
+    function deposit(
+        uint256 assets,
+        uint256 targetValue,
+        bool principal
+    ) public returns (uint256 shares, uint256 assetsDeposited) {
         address _creditor = creditor();
+
+        // Calculate required assets for target value
+        (uint256 requiredAssets,) = _calculateRequiredAssets(targetValue);
+
+        // Check if user provided enough assets
+        if (requiredAssets > assets) {
+            revert InsufficientAssets(requiredAssets, assets);
+        }
 
         if (principal) {
             // Principal deposits can be made by creditor or debtor
@@ -142,9 +157,8 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
 
             if (_msgSender() == _creditor) {
                 // Check that the principal value matches the debt amount
-                uint256 value = _priceAssets(assets);
-                if (value != debtAmount) {
-                    revert InvalidPrincipalAmount(value, debtAmount);
+                if (targetValue != debtAmount) {
+                    revert InvalidPrincipalAmount(targetValue, debtAmount);
                 }
 
                 if (principalPaid) {
@@ -152,7 +166,7 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
                 }
 
                 principalPaid = true;
-                emit PrincipalPaid(assets, value, _creditor, debtor);
+                emit PrincipalPaid(requiredAssets, targetValue, _creditor, debtor);
             } else if (_msgSender() == debtor) {
                 // If debtor is depositing, check that the principal has been paid
                 if (!principalPaid) {
@@ -160,17 +174,19 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
                 }
 
                 // Check that the repayment amount doesn't exceed remaining principal
-                uint256 value = _priceAssets(assets);
-                if (value > debtAmount - principalRepaid) {
-                    revert InvalidPrincipalAmount(value, debtAmount - principalRepaid);
+                if (targetValue > debtAmount - principalRepaid) {
+                    revert InvalidPrincipalAmount(targetValue, debtAmount - principalRepaid);
                 }
 
-                principalRepaid += value;
-                emit PrincipalRepaid(assets, value, debtor, _creditor);
+                principalRepaid += targetValue;
+                emit PrincipalRepaid(requiredAssets, targetValue, debtor, _creditor);
             }
 
             // Deposit to debtor if creditor is depositing, otherwise to creditor
-            return super.deposit(assets, _msgSender() == _creditor ? debtor : _creditor);
+            return (
+                super.deposit(requiredAssets, _msgSender() == _creditor ? debtor : _creditor),
+                requiredAssets
+            );
         } else {
             // Interest payments can only be made by debtor
             if (_msgSender() != debtor) {
@@ -178,15 +194,14 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
             }
 
             // Calculate fees and net interest amount
-            uint256 fees = (assets * feesBips) / 10_000;
-            uint256 netAssets = assets - fees;
+            uint256 fees = (requiredAssets * feesBips) / 10_000;
+            uint256 netAssets = requiredAssets - fees;
 
-            uint256 value = _priceAssets(assets);
-            emit InterestPaid(assets, value, debtor, _creditor);
+            emit InterestPaid(requiredAssets, targetValue, debtor, _creditor);
 
             // Deposit fees to recipient and interest to creditor
             super.deposit(fees, feesRecipient);
-            return super.deposit(netAssets, _creditor);
+            return (super.deposit(netAssets, _creditor), requiredAssets);
         }
     }
 

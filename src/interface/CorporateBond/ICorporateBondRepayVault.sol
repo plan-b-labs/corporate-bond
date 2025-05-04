@@ -25,6 +25,7 @@ interface ICorporateBondRepayVault is IERC4626 {
     error ExcessiveVaultFees(uint48 bips);
     error StalePrice(uint256 updatedAt);
     error InvalidPriceValue(int256 price);
+    error InsufficientAssets(uint256 required, uint256 provided);
 
     /**
      * @notice Gets the price feed used for valuation
@@ -33,14 +34,21 @@ interface ICorporateBondRepayVault is IERC4626 {
     function priceFeed() external view returns (AggregatorV3Interface);
 
     /**
-     * @notice Deposits assets into the vault.
+     * @notice Deposits assets into the vault with a target value.
+     * @dev The vault will only take the necessary assets to meet the target value.
      * @dev The creditor can deposit the principal amount.
      * @dev The debtor can deposit any amount to repay the principal or pay interest.
-     * @param assets The amount of assets to deposit.
-     * @param principal Whether this is a principal deposit or not.
-     * @return shares The amount of shares minted.
+     * @param assets Maximum amount of assets to deposit
+     * @param targetValue Target value in price feed units
+     * @param principal Whether this is a principal deposit
+     * @return shares Amount of shares minted
+     * @return assetsUsed Amount of assets actually used
      */
-    function deposit(uint256 assets, bool principal) external returns (uint256 shares);
+    function deposit(
+        uint256 assets,
+        uint256 targetValue,
+        bool principal
+    ) external returns (uint256 shares, uint256 assetsUsed);
 
     /// @dev Standard ERC4626 deposit not allowed
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
