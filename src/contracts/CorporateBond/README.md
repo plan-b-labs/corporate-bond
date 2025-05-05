@@ -22,13 +22,25 @@ A specialized vault contract that manages the repayment of corporate bonds. It i
 - Handles principal repayment from debtor to creditor
 - Processes interest payments from debtor to creditor
 - Collects fees on interest payments for the vault owner
+- Uses a price feed to calculate token amounts for deposits
 - Enforces proper payment flow and access control
+
+#### Price Feed Integration
+
+The vault uses a Chainlink price feed to:
+
+- Convert between token amounts and target values
+- Allow users to deposit based on target values rather than exact token amounts
+- Support deposits when token/value ratios fluctuate
+- Protect against stale or invalid prices
 
 #### Functional Specification
 
 1. Principal Flow
 
    - Creditor (bond holder) deposits principal amount to vault
+   - Principal value must match debt amount
+   - Required token amount is calculated using price feed
    - Principal is made available to debtor for withdrawal
    - Debtor can later repay principal to creditor through vault
    - Only one principal deposit allowed
@@ -39,8 +51,17 @@ A specialized vault contract that manages the repayment of corporate bonds. It i
    - Interest payments have fees deducted automatically
    - Net interest (minus fees) is credited to creditor
    - Fees are credited to vault owner
+   - Interest value is converted to tokens using price feed
 
-3. Access Control
+3. Deposit Mechanism
+
+   - Users specify maximum tokens to deposit and target value
+   - Vault calculates required tokens using current price
+   - Only takes necessary tokens to meet target value
+   - Reverts if maximum tokens insufficient
+   - Protects against stale prices (>25 hours old)
+
+4. Access Control
 
    - Only creditor can deposit principal
    - Only debtor can deposit interest payments
@@ -48,7 +69,7 @@ A specialized vault contract that manages the repayment of corporate bonds. It i
    - Only vault owner can withdraw fees
    - Only vault owner can modify fee rate
 
-4. Fee Management
+5. Fee Management
    - Fees are calculated in basis points (1 bp = 0.01%)
    - Maximum fee rate is 1000 basis points (10%)
    - Fees only apply to interest payments, not principal
@@ -100,24 +121,28 @@ sequenceDiagram
 
 ### 2. Principal Payment
 
-- Creditor deposits principal to vault
-- Debtor withdraws principal from vault
-
 ```mermaid
 sequenceDiagram
     participant Creditor
     participant RepayVault
+    participant PriceFeed
     participant Debtor
 
-    Creditor->>RepayVault: deposit(principal=true)
-    Note over RepayVault: Validates amount matches debtAmount
+    Creditor->>RepayVault: deposit(maxAssets, debtAmount, principal=true)
+    RepayVault->>PriceFeed: Get latest price
+    PriceFeed-->>RepayVault: Return price
+    Note over RepayVault: Calculate required assets
+    Note over RepayVault: Validates value matches debtAmount
     RepayVault-->>Debtor: Credit principal shares
     Debtor->>RepayVault: withdraw()
     RepayVault-->>Debtor: Transfer principal tokens
 
     Note over RepayVault: Later...
 
-    Debtor->>RepayVault: deposit(principal=true)
+    Debtor->>RepayVault: deposit(maxAssets, debtAmount, principal=true)
+    RepayVault->>PriceFeed: Get latest price
+    PriceFeed-->>RepayVault: Return price
+    Note over RepayVault: Calculate required assets
     RepayVault-->>Creditor: Credit repaid principal shares
     Creditor->>RepayVault: withdraw()
     RepayVault-->>Creditor: Transfer repaid principal tokens
@@ -125,20 +150,18 @@ sequenceDiagram
 
 ### 3. Interest Payment & Principal Repayment
 
-- Debtor makes interest payments through vault
-- Debtor eventually repays principal through vault
-- Creditor can withdraw repaid principal and interest
-
-Flow for interest payment:
-
 ```mermaid
 sequenceDiagram
     participant Debtor
     participant RepayVault
+    participant PriceFeed
     participant Creditor
     participant FeesRecipient
 
-    Debtor->>RepayVault: deposit(principal=false)
+    Debtor->>RepayVault: deposit(maxAssets, targetValue, principal=false)
+    RepayVault->>PriceFeed: Get latest price
+    PriceFeed-->>RepayVault: Return price
+    Note over RepayVault: Calculate required assets
     Note over RepayVault: Calculate fees
     RepayVault-->>FeesRecipient: Credit fee shares
     RepayVault-->>Creditor: Credit net interest shares
