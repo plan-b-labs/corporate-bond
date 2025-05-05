@@ -135,18 +135,18 @@ contract CorporateBondRepayVault is ICorporateBondRepayVault, ERC4626, Ownable {
 
     /// @inheritdoc ICorporateBondRepayVault
     function deposit(
-        uint256 assets,
+        uint256 maxAssets,
         uint256 targetValue,
         bool principal
-    ) public returns (uint256 shares, uint256 assetsDeposited) {
+    ) public returns (uint256 shares, uint256 assetsUsed) {
         address _creditor = creditor();
 
         // Calculate required assets for target value
         (uint256 requiredAssets,) = _calculateRequiredAssets(targetValue);
 
         // Check if user provided enough assets
-        if (requiredAssets > assets) {
-            revert InsufficientAssets(requiredAssets, assets);
+        if (requiredAssets > maxAssets) {
+            revert InsufficientAssets(requiredAssets, maxAssets);
         }
 
         if (principal) {

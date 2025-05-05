@@ -38,14 +38,14 @@ interface ICorporateBondRepayVault is IERC4626 {
      * @dev The vault will only take the necessary assets to meet the target value.
      * @dev The creditor can deposit the principal amount.
      * @dev The debtor can deposit any amount to repay the principal or pay interest.
-     * @param assets Maximum amount of assets to deposit
+     * @param maxAssets Maximum amount of assets to deposit
      * @param targetValue Target value in price feed units
      * @param principal Whether this is a principal deposit
      * @return shares Amount of shares minted
      * @return assetsUsed Amount of assets actually used
      */
     function deposit(
-        uint256 assets,
+        uint256 maxAssets,
         uint256 targetValue,
         bool principal
     ) external returns (uint256 shares, uint256 assetsUsed);
