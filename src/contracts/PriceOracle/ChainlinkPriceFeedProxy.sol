@@ -89,7 +89,13 @@ contract ChainlinkPriceFeedProxy is AggregatorV3Interface, TeleporterRegistryOwn
 
     /**
      * @notice Implements AggregatorV3Interface.getRoundData()
-     * @dev Since we only keep the latest round, this only works for the latest round ID
+     * @dev Returns price data for a specific round ID. Only historical data for rounds that have occurred since deployment is available.
+     * @param _roundId The round ID to get price data for
+     * @return roundId The round ID
+     * @return answer The price
+     * @return startedAt When the round started
+     * @return updatedAt When the round was updated
+     * @return answeredInRound The round in which the answer was computed
      */
     function getRoundData(
         uint80 _roundId
