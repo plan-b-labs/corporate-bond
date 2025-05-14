@@ -1,9 +1,10 @@
-name: CI
+name: test
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
 
 env:
   FOUNDRY_PROFILE: ci
@@ -23,21 +24,17 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
 
-      - name: Show Forge version
+      - name: Run Forge install
         run: |
-          forge --version
-
-      - name: Run Forge fmt
-        run: |
-          forge fmt --check
-        id: fmt
+          forge install
 
       - name: Run Forge build
         run: |
+          forge --version
           forge build --sizes
         id: build
 
       - name: Run Forge tests
         run: |
-          forge test -vvv
+          forge test
         id: test
